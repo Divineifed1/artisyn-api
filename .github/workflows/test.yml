@@ -59,24 +59,21 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile --ignore-scripts
 
-      # - name: Delete all migrations except the initial schema
-      #   run: |
-      #     echo "Deleting migration directories except 20250423000000_initial_schema"
-      #     find prisma/migrations -type d ! -name '20250423000000_initial_schema' -exec rm -rf {} +
+      # Database setup: Single migration strategy for CI
+      # Using 'prisma migrate deploy' (production-safe) instead of 'prisma migrate dev'
+      # This applies all pending migrations in order without creating new ones
+      - name: Generate Prisma Client
+        run: pnpm prisma generate
 
-      - name: Generate Prisma Client and Run Migrations
-        run: pnpm prisma generate \
-          && pnpm prisma migrate deploy \
-          && pnpm prisma db seed
+      - name: Run database migrations
+        run: pnpm prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/artisyn?schema=public
 
-      # - name: Check Prisma Client
-      #   run: cat node_modules/.prisma/client/index.d.ts | grep UserRole
-
-      - name: Run Migrations
-        run: pnpm migrate
-
-      - name: Seed the database
-        run: pnpm seed
+      - name: Seed database
+        run: pnpm prisma db seed
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/artisyn?schema=public
 
       - name: Run Tests
         run: pnpm test
