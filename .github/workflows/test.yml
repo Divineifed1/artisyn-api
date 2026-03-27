@@ -59,21 +59,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile --ignore-scripts
 
-      # Database setup: Single migration strategy for CI
-      # Using 'prisma migrate deploy' (production-safe) instead of 'prisma migrate dev'
-      # This applies all pending migrations in order without creating new ones
-      - name: Generate Prisma Client
-        run: pnpm prisma generate
-
-      - name: Run database migrations
-        run: pnpm prisma migrate deploy
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/artisyn?schema=public
-
-      - name: Seed database
-        run: pnpm prisma db seed
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/artisyn?schema=public
+      # Database setup for CI tests
+      # Using 'prisma db push' for faster, idempotent schema sync in test environment
+      # This avoids migration history conflicts and duplicate enum errors
+      - name: Generate Prisma Client and Sync Database Schema
+        run: |
+          pnpm prisma generate && \
+          pnpm prisma db push --force-reset && \
+          pnpm prisma db seed
 
       - name: Run Tests
         run: pnpm test
