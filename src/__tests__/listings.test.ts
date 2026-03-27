@@ -14,37 +14,27 @@ describe('Listings API Integration Tests', () => {
     let categoryId: string;
     let locationId: string;
     let listingId: string;
+    const runId = Math.random().toString(36).slice(2, 10);
 
     beforeAll(async () => {
-        await prisma.tip.deleteMany();
-        await prisma.review.deleteMany();
-        await prisma.application.deleteMany();
-        await prisma.artisan.deleteMany();
-        await prisma.personalAccessToken.deleteMany();
-        await prisma.curator.deleteMany();
-        await prisma.user.deleteMany();
-        await prisma.subcategory.deleteMany();
-        await prisma.category.deleteMany();
-        await prisma.location.deleteMany();
-
-        const category = await prisma.category.create({ data: { name: 'Test Category' } });
+        const category = await prisma.category.create({ data: { name: `Test Category ${runId}` } });
         categoryId = category.id;
 
         const location = await prisma.location.create({
-            data: { city: 'Test City', state: 'TS', country: 'Testland', latitude: 0, longitude: 0 }
+            data: { city: `Test City ${runId}`, state: 'TS', country: 'Testland', latitude: 0, longitude: 0 }
         });
         locationId = location.id;
 
         const curator = await prisma.user.create({
             data: {
-                email: 'curator@test.com', password: 'hash', firstName: 'C', lastName: 'T', role: UserRole.CURATOR
+                email: `curator-${runId}@test.com`, password: 'hash', firstName: 'C', lastName: 'T', role: UserRole.CURATOR
             }
         });
         curatorId = curator.id;
 
         const user = await prisma.user.create({
             data: {
-                email: 'user@test.com', password: 'hash', firstName: 'U', lastName: 'T', role: UserRole.USER
+                email: `user-${runId}@test.com`, password: 'hash', firstName: 'U', lastName: 'T', role: UserRole.USER
             }
         });
         userId = user.id;
@@ -76,11 +66,27 @@ describe('Listings API Integration Tests', () => {
     });
 
     afterAll(async () => {
-        await prisma.application.deleteMany();
-        await prisma.artisan.deleteMany();
-        await prisma.user.deleteMany();
-        await prisma.category.deleteMany();
-        await prisma.location.deleteMany();
+        await prisma.application.deleteMany({
+            where: {
+                OR: [{ listingId }, { applicantId: userId }]
+            }
+        });
+        await prisma.artisan.deleteMany({
+            where: {
+                OR: [{ id: listingId }, { curatorId }]
+            }
+        });
+        await prisma.personalAccessToken.deleteMany({
+            where: { userId: { in: [curatorId, userId] } }
+        });
+        await prisma.curator.deleteMany({
+            where: { userId: { in: [curatorId, userId] } }
+        });
+        await prisma.user.deleteMany({
+            where: { id: { in: [curatorId, userId] } }
+        });
+        await prisma.category.deleteMany({ where: { id: categoryId } });
+        await prisma.location.deleteMany({ where: { id: locationId } });
     });
 
     it('GET /api/listings should be public and return 200', async () => {
