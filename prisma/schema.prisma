@@ -79,8 +79,6 @@ model User {
   privacySettings      PrivacySettings?
   linkedAccounts       AccountLink[]         @relation("LinkedAccounts")
   auditLogs            AuditLog[]            @relation("UserAuditLogs")
-  dataExportRequests   DataExportRequest[]   @relation("DataExportRequests")
-  applications         Application[]         @relation("Applications")
   jobs                 Job[]
   locationId           String?
 
@@ -802,14 +800,3 @@ model DataExportRequest {
 }
 
 
-model PendingDeletion {
-  id          String   @id @default(cuid())
-  userId      String   @unique
-  scheduledAt DateTime
-  token       String   @unique @default(uuid())
-  createdAt   DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("pending_deletions")
-}
