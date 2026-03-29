@@ -2,7 +2,6 @@ import express, { Express } from "express";
 import { facebookStrategy, googleStrategy } from "./passport";
 import { ipBlockingMiddleware, loadBlockedIPsFromDB, recordFailedAttemptMiddleware, startIPBlockingCleanup } from "src/middleware/ipBlocking";
 import { preventParameterPollutionMiddleware, sanitizeHeadersMiddleware, securityHeadersMiddleware, timingAttackPreventionMiddleware } from "src/middleware/securityHeaders";
-// Security imports
 import { rateLimitMiddleware, registerBypassToken, startRateLimitCleanup } from "src/middleware/rateLimiter";
 import { requestLoggingMiddleware, startLogCleanupScheduler } from "src/utils/securityLogging";
 import routes, { loadRoutes } from "src/routes/index";
@@ -11,6 +10,7 @@ import { ErrorHandler } from "./request-handlers";
 import { analyticsMiddleware } from "./analyticsMiddleware";
 import { apiKeyValidationMiddleware } from "src/services/apiKeyService";
 import cors from "cors";
+import { CorsOptions } from "cors";
 import { env } from "./helpers";
 import { fileURLToPath } from "url";
 import logger from "pino-http";
@@ -24,9 +24,37 @@ import { startMonitoringScheduler } from "src/services/monitoringService";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// ===== CORS CONFIGURATION =====
+const buildCorsOptions = (): CorsOptions => {
+  const allowedOrigins = env("CORS_ALLOWED_ORIGINS")
+    ? env("CORS_ALLOWED_ORIGINS")!.split(",").map((o) => o.trim())
+    : [];
+
+  return {
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+      if (!origin) return callback(null, true);
+
+      if (
+        allowedOrigins.length === 0 ||
+        allowedOrigins.includes("*") ||
+        allowedOrigins.includes(origin)
+      ) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin '${origin}' not allowed`));
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-API-Key", "X-HTTP-Method"],
+    exposedHeaders: ["Content-Range", "X-Content-Range"],
+    maxAge: 86400,
+  };
+};
+
 export const initialize = async (app: Express) => {
   // ===== SECURITY MIDDLEWARE (Must be first) =====
-
 
   // ===== BODY PARSING MIDDLEWARE =====
   // Registered here only. Do not add body parsers in src/index.ts or any
@@ -78,18 +106,14 @@ export const initialize = async (app: Express) => {
   // Record failed authentication attempts for IP blocking
   app.use(recordFailedAttemptMiddleware(['/auth/login', '/auth/register']));
 
-  // Parse application/json
-  app.use(express.json());
-
-  // Parse application/x-www-form-urlencoded (for non-multipart forms)
-  app.use(express.urlencoded({ extended: true }));
+  // ⚠️ REMOVED: Duplicate body parser registrations that were here previously.
+  // express.json() and express.urlencoded() are already registered above.
 
   // Method Override
   app.use(methodOverride("X-HTTP-Method"));
 
   // Route And Cors
   await loadRoutes(path.resolve(__dirname, "../routes"));
-  // app.use(cors());
   app.use(cors(buildCorsOptions()));
 
   // Passport
@@ -114,22 +138,11 @@ export const initialize = async (app: Express) => {
     console.log('[Security] Starting security services and schedulers...');
   }
 
-  // Start rate limit cleanup
   startRateLimitCleanup();
-
-  // Start IP blocking cleanup
   startIPBlockingCleanup();
-
-  // Load previously blocked IPs from database
   await loadBlockedIPsFromDB();
-
-  // Start monitoring scheduler
   startMonitoringScheduler();
-
-  // Start log cleanup scheduler
   startLogCleanupScheduler();
-
-  // Start analytics and media schedulers
   startAnalyticsScheduler();
   startMediaScheduler();
 
